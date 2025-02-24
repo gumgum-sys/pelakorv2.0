@@ -161,29 +161,24 @@ function ubahHarga($data) {
     mysqli_begin_transaction($connect);
     
     try {
-        $stmt = mysqli_prepare($connect, "UPDATE harga SET harga = ? WHERE id_agen = ? AND jenis = ?");
+        // MODIFIKASI: Gunakan INSERT ... ON DUPLICATE KEY UPDATE agar jika data belum ada maka akan INSERT
+        $stmt = mysqli_prepare($connect, 
+            "INSERT INTO harga (id_agen, jenis, harga) 
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE harga = ?");
         if (!$stmt) {
             throw new Exception(mysqli_error($connect));
         }
         
-        $successCount = 0;
         foreach ($prices as $jenis => $harga) {
-            mysqli_stmt_bind_param($stmt, "iis", $harga, $idAgen, $jenis);
-            if (mysqli_stmt_execute($stmt)) {
-                $successCount++;
-            } else {
-                throw new Exception("Gagal mengupdate harga untuk $jenis");
+            mysqli_stmt_bind_param($stmt, "isii", $idAgen, $jenis, $harga, $harga);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new Exception("Gagal menyimpan harga untuk $jenis");
             }
         }
         
-        mysqli_stmt_close($stmt);
-        
-        if ($successCount == count($priceKeys)) {
-            mysqli_commit($connect);
-            return ['status' => true];
-        } else {
-            throw new Exception("Gagal mengupdate semua harga");
-        }
+        mysqli_commit($connect);
+        return ['status' => true];
     } catch (Exception $e) {
         mysqli_rollback($connect);
         error_log("Error in ubahHarga: " . $e->getMessage());

@@ -1,114 +1,149 @@
 <?php
 session_start();
-include '../connect-db.php';
+require_once 'connect-db.php';
+require_once 'functions/functions.php';
 
-header('Content-Type: application/json');
+// Authentication check
+cekPelanggan();
 
-// Handle agent list request dengan rating + pagination
-if (isset($_GET['action']) && $_GET['action'] == 'getAgents') {
-    $keyword = isset($_GET['keyword']) ? mysqli_real_escape_string($connect, $_GET['keyword']) : '';
-    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $jumlahDataPerHalaman = 3; // Sesuaikan dengan index.php
-    $awalData = ($jumlahDataPerHalaman * $page) - $jumlahDataPerHalaman;
-    
-    // Base query untuk menghitung total data (sebelum LIMIT)
-    $baseQuery = "SELECT a.*, 
-                  COALESCE(AVG(NULLIF(t.rating, 0)), 0) as rating
-                  FROM agen a 
-                  LEFT JOIN transaksi t ON a.id_agen = t.id_agen";
-    
-    // Tambahkan kondisi pencarian jika keyword tidak kosong
-    if (!empty($keyword)) {
-        $baseQuery .= " WHERE a.nama_laundry LIKE '%$keyword%'
-                        OR a.kota LIKE '%$keyword%'
-                        OR a.alamat LIKE '%$keyword%'";
+// Database helper functions
+function getAgentData($connect, $agentId) {
+    $stmt = mysqli_prepare($connect, "SELECT * FROM agen WHERE id_agen = ?");
+    mysqli_stmt_bind_param($stmt, "i", $agentId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $data = mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    return $data;
+}
+
+function getCustomerData($connect, $customerId) {
+    $stmt = mysqli_prepare($connect, "SELECT * FROM pelanggan WHERE id_pelanggan = ?");
+    mysqli_stmt_bind_param($stmt, "i", $customerId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $data = mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    return $data;
+}
+
+function calculateAgentRating($connect, $agentId) {
+    $stmt = mysqli_prepare($connect, "SELECT rating FROM transaksi WHERE id_agen = ? AND rating > 0");
+    mysqli_stmt_bind_param($stmt, "i", $agentId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+
+    $totalStars = 0;
+    $count = 0;
+
+    while ($rating = mysqli_fetch_assoc($result)) {
+        $totalStars += $rating["rating"];
+        $count++;
     }
-    
-    $baseQuery .= " GROUP BY a.id_agen";
-    
-    // Hitung total data
-    $countQuery = "SELECT COUNT(*) as total FROM ($baseQuery) as subquery";
-    $countResult = mysqli_query($connect, $countQuery);
-    $rowCount = mysqli_fetch_assoc($countResult);
-    $totalData = $rowCount ? (int)$rowCount['total'] : 0;
-    $totalPages = ceil($totalData / $jumlahDataPerHalaman);
+    mysqli_stmt_close($stmt);
 
-    // Query final dengan LIMIT
-    $query = $baseQuery . " ORDER BY a.nama_laundry ASC
-                            LIMIT $awalData, $jumlahDataPerHalaman";
-    $result = mysqli_query($connect, $query);
-    $agents = [];
+    return $count > 0 ? ceil($totalStars / $count) : 0;
+}
 
-    while ($row = mysqli_fetch_assoc($result)) {
-        $agents[] = [
-            'id_agen' => $row['id_agen'],
-            'nama_laundry' => htmlspecialchars($row['nama_laundry']),
-            'alamat' => htmlspecialchars($row['alamat']),
-            'kota' => htmlspecialchars($row['kota']),
-            'telp' => htmlspecialchars($row['telp']),
-            'foto' => htmlspecialchars($row['foto']),
-            'rating' => round($row['rating'])
-        ];
-    }
+// MODIFIKASI: Fungsi createOrder disesuaikan untuk menyertakan preview_price
+function createOrder($connect, $orderData) {
+    // Hitung preview_price menggunakan fungsi calculateTotalHarga
+    $totalHarga = calculateTotalHarga($orderData, $connect);
 
-    // Kembalikan data + info pagination
-    echo json_encode([
-        'agents' => $agents,
-        'pagination' => [
-            'currentPage' => $page,
-            'totalPages' => $totalPages,
-            'totalRecords' => $totalData,
-            'perPage' => $jumlahDataPerHalaman
-        ]
-    ]);
+    $stmt = mysqli_prepare($connect,
+        "INSERT INTO cucian (id_agen, id_pelanggan, tgl_mulai, jenis, item_type, total_item, preview_price, alamat, catatan, status_cucian) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Penjemputan')");
+
+    mysqli_stmt_bind_param($stmt, "iisssisss",
+        $orderData['id_agen'],
+        $orderData['id_pelanggan'],
+        $orderData['tgl_mulai'],
+        $orderData['jenis'],
+        $orderData['item_type'],
+        $orderData['total_item'],
+        $totalHarga, // preview_price
+        $orderData['alamat'],
+        $orderData['catatan']
+    );
+
+    $result = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    return $result;
+}
+
+// Get request parameters
+$idAgen = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
+$jenis = filter_input(INPUT_GET, 'jenis', FILTER_SANITIZE_STRING);
+$idPelanggan = $_SESSION["pelanggan"];
+
+// Handle AJAX request for prices
+if (isset($_GET['action']) && $_GET['action'] == 'getPrices' && isset($_GET['idAgen'])) {
+    $agentId = filter_input(INPUT_GET, 'idAgen', FILTER_SANITIZE_NUMBER_INT);
+    $prices = getAgentPrices($connect, $agentId);
+    header('Content-Type: application/json');
+    echo json_encode($prices);
     exit;
 }
 
-// Handle price list request (tetap seperti sebelumnya)
-if (isset($_GET['action']) && $_GET['action'] == 'getPrices') {
-    $idAgen = intval($_GET['idAgen']);
-    
-    // Fetch prices from database
-    $query = mysqli_query($connect, "SELECT * FROM harga WHERE id_agen = '$idAgen'");
+// Fetch data
+$agen = getAgentData($connect, $idAgen);
+$pelanggan = getCustomerData($connect, $idPelanggan);
+$rating = calculateAgentRating($connect, $idAgen);
+
+// Function to get agent prices
+function getAgentPrices($connect, $agentId) {
+    $priceTypes = ['cuci', 'setrika', 'komplit', 'baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'];
     $prices = [];
-    
-    while ($row = mysqli_fetch_assoc($query)) {
-        $prices[$row['jenis']] = $row['harga'];
+    foreach ($priceTypes as $jenis) {
+        $query = "SELECT harga FROM harga WHERE id_agen = $agentId AND jenis = '$jenis'";
+        $result = mysqli_query($connect, $query);
+        $row = mysqli_fetch_assoc($result);
+        $prices[$jenis] = $row ? $row['harga'] : 1000;
     }
-    
-    // Default price structure
-    $defaultPrices = [
-        'baju' => [
-            'cuci' => $prices['cuci'] ?? 5000,
-            'setrika' => $prices['setrika'] ?? 3000,
-            'komplit' => $prices['komplit'] ?? 7000
-        ],
-        'celana' => [
-            'cuci' => $prices['cuci'] ?? 4000,
-            'setrika' => $prices['setrika'] ?? 2500,
-            'komplit' => $prices['komplit'] ?? 6000
-        ],
-        'jaket' => [
-            'cuci' => $prices['cuci'] ?? 6000,
-            'setrika' => $prices['setrika'] ?? 4000,
-            'komplit' => $prices['komplit'] ?? 9000
-        ],
-        'karpet' => [
-            'cuci' => $prices['cuci'] ?? 8000,
-            'setrika' => $prices['setrika'] ?? 5000,
-            'komplit' => $prices['komplit'] ?? 10000
-        ],
-        'pakaian_khusus' => [
-            'cuci' => $prices['cuci'] ?? 10000,
-            'setrika' => $prices['setrika'] ?? 6000,
-            'komplit' => $prices['komplit'] ?? 12000
-        ]
-    ];
-    
-    echo json_encode($defaultPrices);
-    exit;
+    return $prices;
 }
-
-// Return error if action not specified
-echo json_encode(['error' => 'Invalid action']);
 ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php include 'headtags.html'; ?>
+    <title>Pemesanan Laundry</title>
+    <style>
+        /* ... (CSS Styles) ... */
+    </style>
+</head>
+<body>
+    <?php include 'header.php'; ?>
+
+    <script>
+        let itemPrices = {};
+
+        function fetchPrices() {
+            const idAgen = <?= $idAgen ?>;
+            fetch(`ajax/agen.php?action=getPrices&idAgen=${idAgen}`)
+                .then(response => response.json())
+                .then(data => {
+                    itemPrices = data;
+                    calculatePrice();
+                })
+                .catch(error => {
+                    console.error('Error fetching prices:', error);
+                    M.toast({html: 'Gagal memuat harga', classes: 'red'});
+                });
+        }
+
+        // ... (JavaScript Functions) ...
+    </script>
+
+    <?php
+    // Order Processing
+    if (isset($_POST["pesan"])) {
+        // ... (Order Processing Code) ...
+    }
+    ?>
+
+    <?php include 'footer.php'; ?>
+</body>
+</html>
