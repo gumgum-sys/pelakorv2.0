@@ -3,10 +3,9 @@ session_start();
 require_once 'connect-db.php';
 require_once 'functions/functions.php';
 
-// Authentication check
+// Pastikan user telah login sebagai Pelanggan
 cekPelanggan();
 
-// Database helper functions
 function getAgentData($connect, $agentId) {
     $stmt = mysqli_prepare($connect, "SELECT * FROM agen WHERE id_agen = ?");
     mysqli_stmt_bind_param($stmt, "i", $agentId);
@@ -67,16 +66,15 @@ function createOrder($connect, $orderData) {
     return $result;
 }
 
-// Get request parameters
+// Ambil parameter dari URL
 $idAgen = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
 $jenis = filter_input(INPUT_GET, 'jenis', FILTER_SANITIZE_STRING);
 $idPelanggan = $_SESSION["pelanggan"];
 
-// Fetch data
+// Ambil data agen dan pelanggan
 $agen = getAgentData($connect, $idAgen);
 $pelanggan = getCustomerData($connect, $idPelanggan);
 $rating = calculateAgentRating($connect, $idAgen);
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -128,7 +126,7 @@ $rating = calculateAgentRating($connect, $idAgen);
 <body>
     <?php include 'header.php'; ?>
 
-    <!-- Laundry Information Section -->
+    <!-- Bagian Informasi Laundry -->
     <div class="container">
         <div class="row">
             <div class="agent-info-container col s12">
@@ -151,7 +149,7 @@ $rating = calculateAgentRating($connect, $idAgen);
         </div>
     </div>
 
-    <!-- Order Form Section -->
+    <!-- Form Pemesanan -->
     <div class="row">
         <div class="col s10 offset-s1">
             <form action="" method="post" id="orderForm">
@@ -171,11 +169,11 @@ $rating = calculateAgentRating($connect, $idAgen);
                     </div>
                 </div>
 
-                <!-- Laundry Package Information -->
+                <!-- Informasi Paket Laundry -->
                 <div class="col s5 offset-s1">
                     <h3 class="header light center">Info Paket Laundry</h3>
                     
-                    <!-- Item Selection -->
+                    <!-- Pilihan Item -->
                     <div class="input-field">
                         <h5>Pilih Jenis Pakaian:</h5>
                         <?php
@@ -197,7 +195,7 @@ $rating = calculateAgentRating($connect, $idAgen);
                         <?php endforeach; ?>
                     </div>
 
-                    <!-- Service Type Selection -->
+                    <!-- Pilihan Jenis Paket -->
                     <div class="input-field">
                         <h5>Jenis Paket:</h5>
                         <div class="row">
@@ -223,16 +221,18 @@ $rating = calculateAgentRating($connect, $idAgen);
                         </div>
                     </div>
 
-                    <!-- Additional Information -->
+                    <!-- Catatan -->
                     <div class="input-field">
                         <textarea class="materialize-textarea" name="catatan" id="catatan"></textarea>
                         <label for="catatan">Catatan</label>
                     </div>
 
+                    <!-- Preview Harga -->
                     <div class="price-preview">
                         <h4>Perkiraan Harga: <span id="pricePreview">Rp 0</span></h4>
                     </div>
 
+                    <!-- Tombol Submit -->
                     <div class="input-field center">
                         <button class="btn-large blue darken-2" type="submit" name="pesan">
                             Buat Pesanan
@@ -247,7 +247,8 @@ $rating = calculateAgentRating($connect, $idAgen);
     let itemPrices = {};
 
     function fetchPrices() {
-        const idAgen = <?= $idAgen ?>;
+        // Pastikan idAgen terformat dengan benar
+        const idAgen = <?= json_encode($idAgen) ?>;
         fetch(`ajax/agen.php?action=getPrices&idAgen=${idAgen}`)
             .then(response => response.json())
             .then(data => {
@@ -271,22 +272,17 @@ $rating = calculateAgentRating($connect, $idAgen);
     }
 
     function calculatePrice() {
-    const serviceType = document.querySelector('input[name="jenis"]:checked')?.value;
-    if (!serviceType) return;
-
-    let totalPrice = 0;
-    // Karena data harga yang didapat adalah flat (misalnya, itemPrices['baju'] = 1000)
-    ['baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'].forEach(item => {
-        const qty = parseInt(document.getElementById(`quantity-${item}`).value) || 0;
-        if (qty > 0 && itemPrices[item]) {
-            totalPrice += qty * itemPrices[item];
-        }
-    });
-
-    document.getElementById('pricePreview').innerText = 
-        `Rp ${totalPrice.toLocaleString('id-ID')}`;
-}
-
+        let totalPrice = 0;
+        // Menghitung harga berdasarkan kuantitas dan data harga yang diambil
+        ['baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'].forEach(item => {
+            const qty = parseInt(document.getElementById(`quantity-${item}`).value) || 0;
+            if (qty > 0 && itemPrices[item]) {
+                totalPrice += qty * itemPrices[item];
+            }
+        });
+        document.getElementById('pricePreview').innerText =
+            `Rp ${totalPrice.toLocaleString('id-ID')}`;
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchPrices();
@@ -297,7 +293,7 @@ $rating = calculateAgentRating($connect, $idAgen);
     </script>
 
     <?php
-    // Order Processing
+    // Proses Order
     if (isset($_POST["pesan"])) {
         $orderData = [
             'id_agen' => $idAgen,

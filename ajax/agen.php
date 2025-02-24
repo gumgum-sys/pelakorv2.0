@@ -1,8 +1,13 @@
 <?php
+// Nonaktifkan error display untuk mencegah output HTML error
+error_reporting(0);
+ini_set('display_errors', 0);
+
 session_start();
 require_once 'connect-db.php';
 require_once 'functions/functions.php';
 
+// Pastikan user telah login sebagai Pelanggan
 cekPelanggan();
 
 function getAgentData($connect, $agentId) {
@@ -43,46 +48,19 @@ function calculateAgentRating($connect, $agentId) {
     return $count > 0 ? ceil($totalStars / $count) : 0;
 }
 
-// Updated createOrder with preview_price calculation
-function createOrder($connect, $orderData) {
-    $totalHarga = calculateTotalHarga($orderData, $connect);
-
-    $stmt = mysqli_prepare($connect,
-        "INSERT INTO cucian (id_agen, id_pelanggan, tgl_mulai, jenis, item_type, total_item, preview_price, alamat, catatan, status_cucian) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Penjemputan')");
-
-    mysqli_stmt_bind_param($stmt, "iisssisss",
-        $orderData['id_agen'],
-        $orderData['id_pelanggan'],
-        $orderData['tgl_mulai'],
-        $orderData['jenis'],
-        $orderData['item_type'],
-        $orderData['total_item'],
-        $totalHarga,
-        $orderData['alamat'],
-        $orderData['catatan']
-    );
-
-    $result = mysqli_stmt_execute($stmt);
-    mysqli_stmt_close($stmt);
-    return $result;
-}
-
-$idAgen = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
-$jenis = filter_input(INPUT_GET, 'jenis', FILTER_SANITIZE_STRING);
-$idPelanggan = $_SESSION["pelanggan"];
-
-if (isset($_GET['action']) && $_GET['action'] == 'getPrices' && isset($_GET['idAgen'])) {
+// Endpoint untuk mengambil data harga secara murni JSON
+if (isset($_GET['action']) && $_GET['action'] == 'getPrices') {
     $agentId = filter_input(INPUT_GET, 'idAgen', FILTER_SANITIZE_NUMBER_INT);
+    if (!$agentId) {
+        header('Content-Type: application/json');
+        echo json_encode([]);
+        exit;
+    }
     $prices = getAgentPrices($connect, $agentId);
     header('Content-Type: application/json');
     echo json_encode($prices);
     exit;
 }
-
-$agen = getAgentData($connect, $idAgen);
-$pelanggan = getCustomerData($connect, $idPelanggan);
-$rating = calculateAgentRating($connect, $idAgen);
 
 function getAgentPrices($connect, $agentId) {
     $priceTypes = ['cuci', 'setrika', 'komplit', 'baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'];
@@ -95,6 +73,11 @@ function getAgentPrices($connect, $agentId) {
     }
     return $prices;
 }
+
+$agen = getAgentData($connect, filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT));
+$idPelanggan = $_SESSION["pelanggan"];
+$pelanggan = getCustomerData($connect, $idPelanggan);
+$rating = calculateAgentRating($connect, filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -109,12 +92,11 @@ function getAgentPrices($connect, $agentId) {
 </head>
 <body>
     <?php include 'header.php'; ?>
-
     <script>
         let itemPrices = {};
 
         function fetchPrices() {
-            const idAgen = <?= $idAgen ?>;
+            const idAgen = <?= json_encode(filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT)) ?>;
             fetch(`ajax/agen.php?action=getPrices&idAgen=${idAgen}`)
                 .then(response => response.json())
                 .then(data => {
@@ -126,16 +108,11 @@ function getAgentPrices($connect, $agentId) {
                     M.toast({html: 'Gagal memuat harga', classes: 'red'});
                 });
         }
-        // ... (Other JavaScript Functions) ...
+        // Fungsi JavaScript tambahan (misalnya calculatePrice) dapat ditambahkan di sini
     </script>
-
     <?php
-    // Order Processing (if needed)
-    if (isset($_POST["pesan"])) {
-        // ... (Order Processing Code) ...
-    }
+    // Jika ada pemrosesan order, letakkan kode di sini (jika diperlukan)
     ?>
-
     <?php include 'footer.php'; ?>
 </body>
 </html>

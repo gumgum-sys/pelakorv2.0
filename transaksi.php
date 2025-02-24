@@ -3,6 +3,60 @@ session_start();
 require_once 'connect-db.php';
 require_once 'functions/functions.php';
 
+// Fungsi untuk generate kode transaksi baru berdasarkan tanggal dan nomor urut
+function generateKodeTransaksi($connect) {
+    $year = date("Y");
+    $month = date("m");
+    $day = date("d");
+    $likePattern = $year . $month . $day . '%';
+    
+    $lastNumQuery = mysqli_query($connect, 
+        "SELECT kode_transaksi FROM transaksi 
+         WHERE kode_transaksi LIKE '$likePattern'
+         ORDER BY kode_transaksi DESC LIMIT 1");
+    
+    // Pengecekan error query
+    if (!$lastNumQuery) {
+        die("Query Error (generateKodeTransaksi): " . mysqli_error($connect));
+    }
+    
+    if ($row = mysqli_fetch_assoc($lastNumQuery)) {
+        $lastNum = intval(substr($row['kode_transaksi'], -4));
+        $nextNum = $lastNum + 1;
+    } else {
+        $nextNum = 1;
+    }
+    
+    return $year . $month . $day . str_pad($nextNum, 4, "0", STR_PAD_LEFT);
+}
+
+// Periksa dan update transaksi yang belum memiliki kode_transaksi
+$updateQuery = mysqli_query($connect, "SELECT id_transaksi FROM transaksi WHERE kode_transaksi IS NULL OR kode_transaksi = ''");
+
+// Pengecekan error query
+if (!$updateQuery) {
+    die("Query Error (updateQuery): " . mysqli_error($connect));
+}
+
+while($trans = mysqli_fetch_assoc($updateQuery)) {
+    $kodeBaru = generateKodeTransaksi($connect);
+    $idTransaksi = $trans['id_transaksi'];
+    $stmtUpdate = mysqli_prepare($connect, "UPDATE transaksi SET kode_transaksi = ? WHERE id_transaksi = ?");
+    
+    // Pengecekan error prepare statement
+    if (!$stmtUpdate) {
+        die("Prepare Error (update transaksi): " . mysqli_error($connect));
+    }
+    
+    mysqli_stmt_bind_param($stmtUpdate, "si", $kodeBaru, $idTransaksi);
+    
+    // Pengecekan error execute statement
+    if (!mysqli_stmt_execute($stmtUpdate)) {
+        die("Execute Error (update transaksi): " . mysqli_stmt_error($stmtUpdate));
+    }
+    
+    mysqli_stmt_close($stmtUpdate);
+}
 // Tentukan tipe login dan ambil data transaksi yang sudah selesai (payment_status = 'Paid')
 // Lakukan JOIN dengan tabel cucian untuk mendapatkan data order yang lengkap.
 if (isset($_SESSION["login-admin"]) && isset($_SESSION["admin"])) {
@@ -11,6 +65,9 @@ if (isset($_SESSION["login-admin"]) && isset($_SESSION["admin"])) {
         FROM transaksi t 
         JOIN cucian c ON t.id_cucian = c.id_cucian 
         WHERE t.payment_status = 'Paid'");
+    if (!$query) {
+        die("Query Error (Admin): " . mysqli_error($connect));
+    }
 } elseif (isset($_SESSION["login-agen"]) && isset($_SESSION["agen"])) {
     $login = "Agen";
     $idAgen = intval($_SESSION["agen"]);
@@ -18,6 +75,9 @@ if (isset($_SESSION["login-admin"]) && isset($_SESSION["admin"])) {
         FROM transaksi t 
         JOIN cucian c ON t.id_cucian = c.id_cucian 
         WHERE t.id_agen = $idAgen AND t.payment_status = 'Paid'");
+    if (!$query) {
+        die("Query Error (Agen): " . mysqli_error($connect));
+    }
 } elseif (isset($_SESSION["login-pelanggan"]) && isset($_SESSION["pelanggan"])) {
     $login = "Pelanggan";
     $idPelanggan = intval($_SESSION["pelanggan"]);
@@ -25,13 +85,16 @@ if (isset($_SESSION["login-admin"]) && isset($_SESSION["admin"])) {
         FROM transaksi t 
         JOIN cucian c ON t.id_cucian = c.id_cucian 
         WHERE t.id_pelanggan = $idPelanggan AND t.payment_status = 'Paid'");
+    if (!$query) {
+        die("Query Error (Pelanggan): " . mysqli_error($connect));
+    }
 } else {
     header("Location: login.php");
     exit();
 }
 
-// Simpan data transaksi ke dalam array agar bisa digunakan untuk modal detail
 $transactions = mysqli_fetch_all($query, MYSQLI_ASSOC);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -201,18 +264,18 @@ $transactions = mysqli_fetch_all($query, MYSQLI_ASSOC);
     <!-- Modals untuk detail order (hanya Agen) -->
     <?php foreach ($transactions as $transaksi): ?>
         <div id="modal-<?= htmlspecialchars($transaksi['id_cucian']) ?>" class="modal">
-          <div class="modal-content">
+        <div class="modal-content">
             <h4>Detail Order #<?= htmlspecialchars($transaksi['id_cucian']) ?></h4>
             <table class="striped">
-              <thead>
+            <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Quantity</th>
-                  <th>Harga per Item</th>
-                  <th>Total</th>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Harga per Item</th>
+                <th>Total</th>
                 </tr>
-              </thead>
-              <tbody>
+            </thead>
+            <tbody>
                 <?php
                 $items = explode(', ', $transaksi['item_type']);
                 foreach($items as $item) {
@@ -233,12 +296,12 @@ $transactions = mysqli_fetch_all($query, MYSQLI_ASSOC);
                     }
                 }
                 ?>
-              </tbody>
+            </tbody>
             </table>
-          </div>
-          <div class="modal-footer">
+        </div>
+        <div class="modal-footer">
             <a href="#!" class="modal-close btn">Close</a>
-          </div>
+        </div>
         </div>
     <?php endforeach; ?>
     <?php endif; ?>
@@ -246,8 +309,8 @@ $transactions = mysqli_fetch_all($query, MYSQLI_ASSOC);
     <script>
         // Inisialisasi modal menggunakan Materialize (pastikan library Materialize sudah diinclude)
         document.addEventListener('DOMContentLoaded', function() {
-          var modals = document.querySelectorAll('.modal');
-          M.Modal.init(modals);
+            var modals = document.querySelectorAll('.modal');
+            M.Modal.init(modals);
         });
     </script>
     <?php
