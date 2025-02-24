@@ -3,10 +3,8 @@ session_start();
 require_once 'connect-db.php';
 require_once 'functions/functions.php';
 
-// Authentication check
 cekPelanggan();
 
-// Database helper functions
 function getAgentData($connect, $agentId) {
     $stmt = mysqli_prepare($connect, "SELECT * FROM agen WHERE id_agen = ?");
     mysqli_stmt_bind_param($stmt, "i", $agentId);
@@ -45,9 +43,8 @@ function calculateAgentRating($connect, $agentId) {
     return $count > 0 ? ceil($totalStars / $count) : 0;
 }
 
-// MODIFIKASI: Fungsi createOrder disesuaikan untuk menyertakan preview_price
+// Updated createOrder with preview_price calculation
 function createOrder($connect, $orderData) {
-    // Hitung preview_price menggunakan fungsi calculateTotalHarga
     $totalHarga = calculateTotalHarga($orderData, $connect);
 
     $stmt = mysqli_prepare($connect,
@@ -61,7 +58,7 @@ function createOrder($connect, $orderData) {
         $orderData['jenis'],
         $orderData['item_type'],
         $orderData['total_item'],
-        $totalHarga, // preview_price
+        $totalHarga,
         $orderData['alamat'],
         $orderData['catatan']
     );
@@ -71,12 +68,10 @@ function createOrder($connect, $orderData) {
     return $result;
 }
 
-// Get request parameters
 $idAgen = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
 $jenis = filter_input(INPUT_GET, 'jenis', FILTER_SANITIZE_STRING);
 $idPelanggan = $_SESSION["pelanggan"];
 
-// Handle AJAX request for prices
 if (isset($_GET['action']) && $_GET['action'] == 'getPrices' && isset($_GET['idAgen'])) {
     $agentId = filter_input(INPUT_GET, 'idAgen', FILTER_SANITIZE_NUMBER_INT);
     $prices = getAgentPrices($connect, $agentId);
@@ -85,12 +80,10 @@ if (isset($_GET['action']) && $_GET['action'] == 'getPrices' && isset($_GET['idA
     exit;
 }
 
-// Fetch data
 $agen = getAgentData($connect, $idAgen);
 $pelanggan = getCustomerData($connect, $idPelanggan);
 $rating = calculateAgentRating($connect, $idAgen);
 
-// Function to get agent prices
 function getAgentPrices($connect, $agentId) {
     $priceTypes = ['cuci', 'setrika', 'komplit', 'baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'];
     $prices = [];
@@ -133,12 +126,11 @@ function getAgentPrices($connect, $agentId) {
                     M.toast({html: 'Gagal memuat harga', classes: 'red'});
                 });
         }
-
-        // ... (JavaScript Functions) ...
+        // ... (Other JavaScript Functions) ...
     </script>
 
     <?php
-    // Order Processing
+    // Order Processing (if needed)
     if (isset($_POST["pesan"])) {
         // ... (Order Processing Code) ...
     }

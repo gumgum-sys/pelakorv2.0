@@ -161,7 +161,7 @@ function ubahHarga($data) {
     mysqli_begin_transaction($connect);
     
     try {
-        // MODIFIKASI: Gunakan INSERT ... ON DUPLICATE KEY UPDATE agar jika data belum ada maka akan INSERT
+        // Use INSERT ... ON DUPLICATE KEY UPDATE. The UNIQUE KEY on (id_agen, jenis) in table harga now ensures proper updates.
         $stmt = mysqli_prepare($connect, 
             "INSERT INTO harga (id_agen, jenis, harga) 
              VALUES (?, ?, ?)

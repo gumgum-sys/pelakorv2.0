@@ -86,7 +86,6 @@ $rating = calculateAgentRating($connect, $idAgen);
     <?php include 'headtags.html'; ?>
     <title>Pemesanan Laundry</title>
     <style>
-        /* Membuat foto profil menjadi bulat sempurna */
         .profile-img {
             width: 120px;
             height: 120px;
@@ -94,7 +93,6 @@ $rating = calculateAgentRating($connect, $idAgen);
             border-radius: 50%;
             border: 2px solid #ddd;
         }
-        /* Flex container untuk menyatukan foto & detail agen dalam satu baris */
         .agent-info-container {
             display: flex;
             align-items: center;
@@ -133,7 +131,6 @@ $rating = calculateAgentRating($connect, $idAgen);
     <!-- Laundry Information Section -->
     <div class="container">
         <div class="row">
-            <!-- Agent info container: foto & detail dalam satu baris -->
             <div class="agent-info-container col s12">
                 <div>
                     <img src="img/agen/<?= htmlspecialchars($agen['foto']) ?>" class="profile-img" alt="Laundry Logo">
@@ -158,7 +155,6 @@ $rating = calculateAgentRating($connect, $idAgen);
     <div class="row">
         <div class="col s10 offset-s1">
             <form action="" method="post" id="orderForm">
-                <!-- Customer Information -->
                 <div class="col s5">
                     <h3 class="header light center">Data Diri</h3>
                     <div class="input-field">
@@ -275,20 +271,22 @@ $rating = calculateAgentRating($connect, $idAgen);
     }
 
     function calculatePrice() {
-        const serviceType = document.querySelector('input[name="jenis"]:checked')?.value;
-        if (!serviceType) return;
+    const serviceType = document.querySelector('input[name="jenis"]:checked')?.value;
+    if (!serviceType) return;
 
-        let totalPrice = 0;
-        ['baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'].forEach(item => {
-            const qty = parseInt(document.getElementById(`quantity-${item}`).value) || 0;
-            if (qty > 0 && itemPrices[item]?.[serviceType]) {
-                totalPrice += qty * itemPrices[item][serviceType];
-            }
-        });
+    let totalPrice = 0;
+    // Karena data harga yang didapat adalah flat (misalnya, itemPrices['baju'] = 1000)
+    ['baju', 'celana', 'jaket', 'karpet', 'pakaian_khusus'].forEach(item => {
+        const qty = parseInt(document.getElementById(`quantity-${item}`).value) || 0;
+        if (qty > 0 && itemPrices[item]) {
+            totalPrice += qty * itemPrices[item];
+        }
+    });
 
-        document.getElementById('pricePreview').innerText = 
-            `Rp ${totalPrice.toLocaleString('id-ID')}`;
-    }
+    document.getElementById('pricePreview').innerText = 
+        `Rp ${totalPrice.toLocaleString('id-ID')}`;
+}
+
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchPrices();
@@ -310,7 +308,6 @@ $rating = calculateAgentRating($connect, $idAgen);
             'catatan' => filter_input(INPUT_POST, 'catatan', FILTER_SANITIZE_STRING),
         ];
 
-        // Process item selections
         $items = $_POST['items'] ?? [];
         $quantities = $_POST['quantities'] ?? [];
         $totalItems = 0;
@@ -324,7 +321,6 @@ $rating = calculateAgentRating($connect, $idAgen);
             }
         }
 
-        // Cek apakah ada item yang dipilih
         if ($totalItems <= 0) {
             echo "<script>
                 Swal.fire({

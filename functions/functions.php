@@ -185,21 +185,18 @@ function cekBelumLogin(){
 
 // ============== BAGIAN HARGA DAN PERHITUNGAN ============= //
 
-// Ambil harga paket cuci / setrika / komplit
 function getHargaPaket($jenis, $idAgen, $connect) {
     $q = mysqli_query($connect, "SELECT harga FROM harga WHERE id_agen = $idAgen AND jenis = '$jenis'");
     $row = mysqli_fetch_assoc($q);
     return $row['harga'] ?? 0;
 }
 
-// Ambil harga per item (baju, celana, jaket, dll.)
 function getPerItemPrice($item, $idAgen, $connect) {
     $q = mysqli_query($connect, "SELECT harga FROM harga WHERE id_agen = $idAgen AND jenis = '$item'");
     $row = mysqli_fetch_assoc($q);
     return $row['harga'] ?? 0;
 }
 
-// Menghitung total harga semua item. Contoh item_type: "Baju(2), Celana(3)"
 function getTotalPerItem($itemType, $idAgen, $connect) {
     $total = 0;
     if (empty($itemType)) return $total;
@@ -208,7 +205,7 @@ function getTotalPerItem($itemType, $idAgen, $connect) {
     foreach($items as $it) {
         if(trim($it) == "") continue;
         if(preg_match('/([^(]+)\((\d+)\)/', $it, $matches)) {
-            $item = strtolower(trim($matches[1]));  // 'baju', 'celana', dsb.
+            $item = strtolower(trim($matches[1]));
             $qty = (int)$matches[2];
             $price = getPerItemPrice($item, $idAgen, $connect);
             $total += $price * $qty;
@@ -217,23 +214,10 @@ function getTotalPerItem($itemType, $idAgen, $connect) {
     return $total;
 }
 
-/**
- * Menghitung total harga cucian:
- *   - Secara default: (harga paket * berat) + total per item.
- *   - Jika berat belum diisi, boleh diatur:
- *       a) pakai default 0 (tidak menambah biaya paket)
- *       b) atau pakai default 1 (harga paket flat)
- *       c) atau hilangkan perkalian berat sama sekali jika tak dibutuhkan
- */
 function calculateTotalHarga($order, $connect) {
-    // Contoh: jika berat masih null, kita anggap 0 agar tidak error:
     $berat = $order['berat'] ?? 0;
-    
-    // Apabila Bos ingin harga paket TIDAK tergantung berat, pakai:
-    //   $paket = getHargaPaket($order["jenis"], $order["id_agen"], $connect);
-    // Apabila Bos tetap ingin dikalikan berat, pakai:
     $paket = getHargaPaket($order["jenis"], $order["id_agen"], $connect) * $berat;
-    
     $totalPerItem = getTotalPerItem($order["item_type"] ?? '', $order["id_agen"], $connect);
     return $paket + $totalPerItem;
 }
+?>
